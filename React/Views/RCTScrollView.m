@@ -142,6 +142,7 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
 @interface RCTCustomScrollView : UIScrollView<UIGestureRecognizerDelegate>
 
 @property (nonatomic, copy) NSIndexSet *stickyHeaderIndices;
+@property (nonatomic, copy) NSIndexSet *anchorIndices;
 @property (nonatomic, assign) BOOL centerContent;
 #if !TARGET_OS_TV
 @property (nonatomic, strong) RCTRefreshControl *rctRefreshControl;
@@ -298,6 +299,7 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
   __block UIView *previousHeader = nil;
   __block UIView *currentHeader = nil;
   __block UIView *nextHeader = nil;
+  __block bool shouldContinue = true;
   NSUInteger subviewCount = contentView.reactSubviews.count;
   [_stickyHeaderIndices enumerateIndexesWithOptions:0 usingBlock:
    ^(NSUInteger idx, BOOL *stop) {
@@ -305,6 +307,9 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
     // If the subviews are out of sync with the sticky header indices don't
     // do anything.
     if (idx >= subviewCount) {
+      // TODO: shouldContinue is missing upstream which causes this function
+      // to continue executing. Need to send a bug fix
+      shouldContinue = false;
       *stop = YES;
       return;
     }
@@ -330,7 +335,7 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
   }];
 
   // If no docked header, bail out
-  if (!currentHeader) {
+  if (!currentHeader || !shouldContinue) {
     return;
   }
 
@@ -429,6 +434,11 @@ static inline BOOL isRectInvalid(CGRect rect) {
   // Tells if user was scrolling forward or backward and is used to determine a correct
   // snap index when the user stops scrolling with a tap on the scroll view.
   CGFloat _lastNonZeroTranslationAlongAxis;
+
+  CGPoint _lastAnchorPoint;
+  UIView *_anchoredView;
+  BOOL _anchorMode;
+  BOOL _autoScrollToBottom;
 }
 
 - (instancetype)initWithEventDispatcher:(RCTEventDispatcher *)eventDispatcher
@@ -524,6 +534,26 @@ static inline void RCTApplyTranformationAccordingLayoutDirection(UIView *view, U
   _scrollView.centerContent = centerContent;
 }
 
+- (BOOL)anchorMode
+{
+  return _anchorMode;
+}
+
+- (void)setAnchorMode:(BOOL)anchorMode
+{
+  _anchorMode = anchorMode;
+}
+
+- (BOOL)autoScrollToBottom
+{
+  return _autoScrollToBottom;
+}
+
+- (void)setAutoScrollToBottom:(BOOL)autoScrollToBottom
+{
+  _autoScrollToBottom = autoScrollToBottom;
+}
+
 - (NSIndexSet *)stickyHeaderIndices
 {
   return _scrollView.stickyHeaderIndices;
@@ -532,8 +562,18 @@ static inline void RCTApplyTranformationAccordingLayoutDirection(UIView *view, U
 - (void)setStickyHeaderIndices:(NSIndexSet *)headerIndices
 {
   RCTAssert(_scrollView.contentSize.width <= self.frame.size.width,
-           @"sticky headers are not supported with horizontal scrolled views");
+            @"sticky headers are not supported with horizontal scrolled views");
   _scrollView.stickyHeaderIndices = headerIndices;
+}
+
+- (NSIndexSet *)anchorIndices
+{
+  return _scrollView.anchorIndices;
+}
+
+- (void)setAnchorIndices:(NSIndexSet *)anchorIndices
+{
+  _scrollView.anchorIndices = anchorIndices;
 }
 
 - (void)setClipsToBounds:(BOOL)clipsToBounds
@@ -729,11 +769,23 @@ RCT_SCROLL_EVENT_HANDLER(scrollViewDidZoom, onScroll)
 - (NSArray<NSDictionary *> *)calculateChildFramesData
 {
     NSMutableArray<NSDictionary *> *updatedChildFrames = [NSMutableArray new];
+    __block BOOL anchorSet = false;
     [[_contentView reactSubviews] enumerateObjectsUsingBlock:
      ^(UIView *subview, NSUInteger idx, __unused BOOL *stop) {
 
       // Check if new or changed
       CGRect newFrame = subview.frame;
+
+      // TODO(nw): this is a giant hack. need a better way to know if we're up to date
+      // TODO(nw): this doesn't take position into account
+      if (CGSizeEqualToSize(_scrollView.contentSize, self.contentSize)) {
+       if (!anchorSet && [self.anchorIndices containsIndex:idx]) {
+         _anchoredView = subview;
+         _lastAnchorPoint = newFrame.origin;
+         anchorSet = true;
+       }
+      }
+
       BOOL frameChanged = NO;
       if (self->_cachedChildFrames.count <= idx) {
         frameChanged = YES;
@@ -929,6 +981,30 @@ RCT_SCROLL_EVENT_HANDLER(scrollViewDidZoom, onScroll)
     } else if (offsetHeight > newContentSize.width) {
       // offset falls outside of bounds, scroll back to end
       newOffset.x = MAX(0, newContentSize.width - viewportSize.width);
+    }
+  }
+
+  // nw additions
+  // If we're in anchor mode, the offset changes so that the anchored view maintains its position
+  if (_anchorMode) {
+    if ([_contentView.reactSubviews count] == 0) {
+      _anchoredView = nil;
+    }
+
+    if (newContentSize.height >= oldContentSize.height) {
+      CGFloat offsetHeight = oldOffset.y + self.bounds.size.height;
+      if (_anchoredView) {
+        if (_autoScrollToBottom &&
+            oldContentSize.height >= self.bounds.size.height &&
+            offsetHeight >= oldContentSize.height) {
+          newOffset.y = MAX(0, newContentSize.height - self.bounds.size.height);
+        } else {
+          newOffset.y = MAX(0, oldOffset.y - (_lastAnchorPoint.y - _anchoredView.frame.origin.y));
+        }
+      } else {
+        // offset falls outside of bounds, scroll back to end of list
+        newOffset.y = MAX(0, newContentSize.height - self.bounds.size.height);
+      }
     }
   }
 
