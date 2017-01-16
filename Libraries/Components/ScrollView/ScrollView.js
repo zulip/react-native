@@ -112,6 +112,26 @@ const ScrollView = React.createClass({
      */
     alwaysBounceVertical: PropTypes.bool,
     /**
+     * An array of child indices determining which children count as
+     * 'anchors' (points of reference that tell the scroll view how to maintain
+     * its positions as items are added or removed).
+     * @platform ios
+     */
+    anchorIndices: PropTypes.arrayOf(PropTypes.number),
+    /**
+     * When true, the scroll view automatically adjusts the offset of the
+     * scroll view to maintain its position when items are added and deleted
+     * from either end of the scroll view.
+     * @platform ios
+     */
+    anchorMode: PropTypes.bool,
+    /**
+     * When true, if the scroll view is scrolled to the bottom, it will
+     * remain scrolled to the bottom as new items are added.
+     * @platform ios
+     */
+    autoScrollToBottom: PropTypes.bool,
+    /**
      * When true, the scroll view automatically centers the content when the
      * content is smaller than the scroll view bounds; when the content is
      * larger than the scroll view, this property has no effect. The default
