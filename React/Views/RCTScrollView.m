@@ -299,7 +299,6 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
   __block UIView *previousHeader = nil;
   __block UIView *currentHeader = nil;
   __block UIView *nextHeader = nil;
-  __block bool shouldContinue = true;
   NSUInteger subviewCount = contentView.reactSubviews.count;
   [_stickyHeaderIndices enumerateIndexesWithOptions:0 usingBlock:
    ^(NSUInteger idx, BOOL *stop) {
@@ -307,9 +306,6 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
     // If the subviews are out of sync with the sticky header indices don't
     // do anything.
     if (idx >= subviewCount) {
-      // TODO: shouldContinue is missing upstream which causes this function
-      // to continue executing. Need to send a bug fix
-      shouldContinue = false;
       *stop = YES;
       return;
     }
@@ -335,7 +331,7 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
   }];
 
   // If no docked header, bail out
-  if (!currentHeader || !shouldContinue) {
+  if (!currentHeader) {
     return;
   }
 
@@ -436,7 +432,6 @@ static inline BOOL isRectInvalid(CGRect rect) {
   CGFloat _lastNonZeroTranslationAlongAxis;
 
   CGPoint _lastAnchorPoint;
-  UIView *_anchoredView;
   BOOL _anchorMode;
   BOOL _autoScrollToBottom;
 }
@@ -562,7 +557,7 @@ static inline void RCTApplyTranformationAccordingLayoutDirection(UIView *view, U
 - (void)setStickyHeaderIndices:(NSIndexSet *)headerIndices
 {
   RCTAssert(_scrollView.contentSize.width <= self.frame.size.width,
-            @"sticky headers are not supported with horizontal scrolled views");
+           @"sticky headers are not supported with horizontal scrolled views");
   _scrollView.stickyHeaderIndices = headerIndices;
 }
 
@@ -769,23 +764,11 @@ RCT_SCROLL_EVENT_HANDLER(scrollViewDidZoom, onScroll)
 - (NSArray<NSDictionary *> *)calculateChildFramesData
 {
     NSMutableArray<NSDictionary *> *updatedChildFrames = [NSMutableArray new];
-    __block BOOL anchorSet = false;
     [[_contentView reactSubviews] enumerateObjectsUsingBlock:
      ^(UIView *subview, NSUInteger idx, __unused BOOL *stop) {
 
       // Check if new or changed
       CGRect newFrame = subview.frame;
-
-      // TODO(nw): this is a giant hack. need a better way to know if we're up to date
-      // TODO(nw): this doesn't take position into account
-      if (CGSizeEqualToSize(_scrollView.contentSize, self.contentSize)) {
-       if (!anchorSet && [self.anchorIndices containsIndex:idx]) {
-         _anchoredView = subview;
-         _lastAnchorPoint = newFrame.origin;
-         anchorSet = true;
-       }
-      }
-
       BOOL frameChanged = NO;
       if (self->_cachedChildFrames.count <= idx) {
         frameChanged = YES;
@@ -987,24 +970,24 @@ RCT_SCROLL_EVENT_HANDLER(scrollViewDidZoom, onScroll)
   // nw additions
   // If we're in anchor mode, the offset changes so that the anchored view maintains its position
   if (_anchorMode) {
-    if ([_contentView.reactSubviews count] == 0) {
-      _anchoredView = nil;
+    UIView *anchor = nil;
+    if ([self.anchorIndices count] > 0) {
+      anchor = [[_contentView reactSubviews] objectAtIndex:[self.anchorIndices firstIndex]];
     }
 
-    if (newContentSize.height >= oldContentSize.height) {
-      CGFloat offsetHeight = oldOffset.y + self.bounds.size.height;
-      if (_anchoredView) {
-        if (_autoScrollToBottom &&
-            oldContentSize.height >= self.bounds.size.height &&
-            offsetHeight >= oldContentSize.height) {
-          newOffset.y = MAX(0, newContentSize.height - self.bounds.size.height);
-        } else {
-          newOffset.y = MAX(0, oldOffset.y - (_lastAnchorPoint.y - _anchoredView.frame.origin.y));
-        }
-      } else {
-        // offset falls outside of bounds, scroll back to end of list
+    CGFloat offsetHeight = oldOffset.y + self.bounds.size.height;
+    if (anchor) {
+      if (_autoScrollToBottom &&
+          oldContentSize.height >= self.bounds.size.height &&
+          offsetHeight >= oldContentSize.height) {
         newOffset.y = MAX(0, newContentSize.height - self.bounds.size.height);
+      } else {
+        newOffset.y = MAX(0, oldOffset.y - (_lastAnchorPoint.y - anchor.frame.origin.y));
       }
+      _lastAnchorPoint = anchor.frame.origin;
+    } else {
+      // offset falls outside of bounds, scroll back to end of list
+      newOffset.y = MAX(0, newContentSize.height - self.bounds.size.height);
     }
   }
 
@@ -1056,7 +1039,9 @@ RCT_SCROLL_EVENT_HANDLER(scrollViewDidZoom, onScroll)
 - (void)didSetProps:(NSArray<NSString *> *)changedProps
 {
   if ([changedProps containsObject:@"stickyHeaderIndices"]) {
-    [_scrollView dockClosestSectionHeader];
+    // TODO (nw): figure out how to handle this
+    // Causing a race condition so disabling for now
+    //[_scrollView dockClosestSectionHeader];
   }
 }
 
