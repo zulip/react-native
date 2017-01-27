@@ -143,7 +143,9 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
 
 @property (nonatomic, copy) NSIndexSet *stickyHeaderIndices;
 @property (nonatomic, copy) NSIndexSet *anchorIndices;
+@property (nonatomic, copy) NSDictionary *anchorMap;
 @property (nonatomic, assign) BOOL centerContent;
+
 #if !TARGET_OS_TV
 @property (nonatomic, strong) RCTRefreshControl *rctRefreshControl;
 #endif
@@ -154,6 +156,21 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
 @implementation RCTCustomScrollView
 {
   __weak UIView *_dockedHeaderView;
+  NSNumber *_anchorIndex;
+  CGPoint _lastAnchorPoint;
+}
+
+- (CGFloat) anchorChange
+{
+  UIView *contentView = [self contentView];
+  if (_anchorIndex) {
+    NSNumber *newIdx = nil;
+    if ((newIdx = [_anchorMap objectForKey:[_anchorIndex stringValue]])) {
+      UIView *anchorView = [[contentView reactSubviews] objectAtIndex:[newIdx unsignedIntegerValue]];
+      return anchorView.frame.origin.y - _lastAnchorPoint.y;
+    }
+  }
+  return CGFLOAT_MAX;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame
@@ -280,6 +297,36 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
     }
   }
   super.contentOffset = contentOffset;
+}
+
+- (void)findClosestAnchor:(BOOL)scrollingDown
+{
+  UIView *contentView = [self contentView];
+  CGFloat scrollTop = self.bounds.origin.y + self.contentInset.top;
+  CGFloat scrollBottom = self.bounds.origin.y + self.contentInset.top + self.bounds.size.height;
+
+  __block UIView *nextAnchor = nil;
+  _anchorIndex = nil;
+  NSEnumerationOptions opts = scrollingDown? NSEnumerationReverse : 0;
+  [_anchorIndices enumerateIndexesWithOptions:opts usingBlock:
+   ^(NSUInteger idx, BOOL *stop) {
+    UIView *anchor = contentView.reactSubviews[idx];
+
+    if (!nextAnchor) {
+      CGFloat height = anchor.bounds.size.height;
+      CGFloat top = anchor.center.y - height * anchor.layer.anchorPoint.y;
+      CGFloat bottom = anchor.center.y + height * anchor.layer.anchorPoint.y;
+
+      BOOL condition = scrollingDown? top <= scrollBottom : bottom >= scrollTop;
+      if (condition) {
+        nextAnchor = anchor;
+        _anchorIndex = [NSNumber numberWithUnsignedInteger:idx];
+        _lastAnchorPoint = nextAnchor.frame.origin;
+        *stop = YES;
+        return;
+      }
+    }
+   }];
 }
 
 - (void)dockClosestSectionHeader
@@ -420,6 +467,7 @@ static inline BOOL isRectInvalid(CGRect rect) {
   RCTCustomScrollView *_scrollView;
   UIView *_contentView;
   NSTimeInterval _lastScrollDispatchTime;
+  CGPoint _lastContentOffset;
   NSMutableArray<NSValue *> *_cachedChildFrames;
   BOOL _allowNextScrollNoMatterWhat;
   CGRect _lastClippedToRect;
@@ -431,7 +479,6 @@ static inline BOOL isRectInvalid(CGRect rect) {
   // snap index when the user stops scrolling with a tap on the scroll view.
   CGFloat _lastNonZeroTranslationAlongAxis;
 
-  CGPoint _lastAnchorPoint;
   BOOL _anchorMode;
   BOOL _autoScrollToBottom;
 }
@@ -559,6 +606,16 @@ static inline void RCTApplyTranformationAccordingLayoutDirection(UIView *view, U
   RCTAssert(_scrollView.contentSize.width <= self.frame.size.width,
            @"sticky headers are not supported with horizontal scrolled views");
   _scrollView.stickyHeaderIndices = headerIndices;
+}
+
+- (NSDictionary *)anchorMap
+{
+  return _scrollView.anchorMap;
+}
+
+- (void)setAnchorMap:(NSDictionary *)anchorMap
+{
+  _scrollView.anchorMap = anchorMap;
 }
 
 - (NSIndexSet *)anchorIndices
@@ -738,6 +795,15 @@ RCT_SCROLL_EVENT_HANDLER(scrollViewDidZoom, onScroll)
   [self updateClippedSubviews];
 
   NSTimeInterval now = CACurrentMediaTime();
+
+  if (_lastContentOffset.y > _scrollView.contentOffset.y) {
+    // Scrolled up
+    [_scrollView findClosestAnchor:false];
+  } else {
+    // Assume scrolled down
+    [_scrollView findClosestAnchor:true];
+  }
+  _lastContentOffset = _scrollView.contentOffset;
 
   /**
    * TODO: this logic looks wrong, and it may be because it is. Currently, if _scrollEventThrottle
@@ -970,21 +1036,16 @@ RCT_SCROLL_EVENT_HANDLER(scrollViewDidZoom, onScroll)
   // nw additions
   // If we're in anchor mode, the offset changes so that the anchored view maintains its position
   if (_anchorMode) {
-    UIView *anchor = nil;
-    if ([self.anchorIndices count] > 0) {
-      anchor = [[_contentView reactSubviews] objectAtIndex:[self.anchorIndices firstIndex]];
-    }
-
     CGFloat offsetHeight = oldOffset.y + self.bounds.size.height;
-    if (anchor) {
+    CGFloat anchorChange = [_scrollView anchorChange];
+    if (anchorChange != CGFLOAT_MAX) {
       if (_autoScrollToBottom &&
           oldContentSize.height >= self.bounds.size.height &&
           offsetHeight >= oldContentSize.height) {
         newOffset.y = MAX(0, newContentSize.height - self.bounds.size.height);
       } else {
-        newOffset.y = MAX(0, oldOffset.y - (_lastAnchorPoint.y - anchor.frame.origin.y));
+        newOffset.y = MAX(0, oldOffset.y + anchorChange);
       }
-      _lastAnchorPoint = anchor.frame.origin;
     } else {
       // offset falls outside of bounds, scroll back to end of list
       newOffset.y = MAX(0, newContentSize.height - self.bounds.size.height);
@@ -1034,6 +1095,9 @@ RCT_SCROLL_EVENT_HANDLER(scrollViewDidZoom, onScroll)
                  lastIndex, subviewCount);
     }
   }
+
+  [_scrollView dockClosestSectionHeader];
+  [_scrollView findClosestAnchor:false];
 }
 
 - (void)didSetProps:(NSArray<NSString *> *)changedProps
