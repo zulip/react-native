@@ -39,7 +39,7 @@ RCT_EXPORT_MODULE()
 
   UIImage *image = nil;
   size_t imageCount = CGImageSourceGetCount(imageSource);
-  if (imageCount > 1) {
+  if (false) {
 
     NSTimeInterval duration = 0;
     NSMutableArray<NSNumber *> *delays = [NSMutableArray arrayWithCapacity:imageCount];
