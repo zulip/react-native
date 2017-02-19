@@ -142,8 +142,11 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
 @interface RCTCustomScrollView : UIScrollView<UIGestureRecognizerDelegate>
 
 @property (nonatomic, copy) NSIndexSet *stickyHeaderIndices;
-@property (nonatomic, copy) NSIndexSet *anchorIndices;
-@property (nonatomic, copy) NSDictionary *anchorMap;
+
+@property (nonatomic, copy) NSString *anchorID;
+
+@property (nonatomic, copy) NSMutableArray *visibleIndices;
+
 @property (nonatomic, assign) BOOL centerContent;
 
 #if !TARGET_OS_TV
@@ -156,17 +159,28 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
 @implementation RCTCustomScrollView
 {
   __weak UIView *_dockedHeaderView;
-  NSNumber *_anchorIndex;
   CGPoint _lastAnchorPoint;
 }
 
 - (CGFloat) anchorChange
 {
   UIView *contentView = [self contentView];
-  if (_anchorIndex) {
-    NSNumber *newIdx = nil;
-    if ((newIdx = [_anchorMap objectForKey:[_anchorIndex stringValue]])) {
-      UIView *anchorView = [[contentView reactSubviews] objectAtIndex:[newIdx unsignedIntegerValue]];
+  if (_anchorID) {
+    __block UIView *anchorView = nil;
+    [[contentView reactSubviews] enumerateObjectsUsingBlock:
+     ^(UIView *anchor, __unused NSUInteger idx, BOOL *stop) {
+       RCTView *reactAnchor = (RCTView *) anchor;
+       if (![anchor isKindOfClass:[RCTView class]] || ![reactAnchor assocID]) {
+         return;
+       }
+       NSString *assocID = [reactAnchor assocID];
+       if (assocID && [assocID isEqualToString:_anchorID]) {
+         anchorView = anchor;
+         *stop = YES;
+         return;
+       }
+    }];
+    if (anchorView) {
       return anchorView.frame.origin.y - _lastAnchorPoint.y;
     }
   }
@@ -306,27 +320,32 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
   CGFloat scrollBottom = self.bounds.origin.y + self.contentInset.top + self.bounds.size.height;
 
   __block UIView *nextAnchor = nil;
-  _anchorIndex = nil;
-  NSEnumerationOptions opts = scrollingDown? NSEnumerationReverse : 0;
-  [_anchorIndices enumerateIndexesWithOptions:opts usingBlock:
-   ^(NSUInteger idx, BOOL *stop) {
-    UIView *anchor = contentView.reactSubviews[idx];
+  _anchorID = nil;
+
+  NSEnumerationOptions opts = scrollingDown ? NSEnumerationReverse : 0;
+  [[contentView reactSubviews] enumerateObjectsWithOptions:opts usingBlock:
+  ^(UIView *anchor, __unused NSUInteger idx, BOOL *stop) {
+    RCTView *reactAnchor = (RCTView *) anchor;
+    if (![anchor isKindOfClass:[RCTView class]] || ![reactAnchor assocID]) {
+      return;
+    }
+    CGFloat height = anchor.bounds.size.height;
+    CGFloat top = anchor.center.y - height * anchor.layer.anchorPoint.y;
+    CGFloat bottom = anchor.center.y + height * anchor.layer.anchorPoint.y;
 
     if (!nextAnchor) {
-      CGFloat height = anchor.bounds.size.height;
-      CGFloat top = anchor.center.y - height * anchor.layer.anchorPoint.y;
-      CGFloat bottom = anchor.center.y + height * anchor.layer.anchorPoint.y;
+       BOOL condition = scrollingDown? top <= scrollBottom : bottom >= scrollTop;
 
-      BOOL condition = scrollingDown? top <= scrollBottom : bottom >= scrollTop;
-      if (condition) {
-        nextAnchor = anchor;
-        _anchorIndex = [NSNumber numberWithUnsignedInteger:idx];
-        _lastAnchorPoint = nextAnchor.frame.origin;
-        *stop = YES;
-        return;
-      }
+       // Find the next anchor
+       if (condition) {
+         nextAnchor = anchor;
+         _lastAnchorPoint = nextAnchor.frame.origin;
+         _anchorID = [reactAnchor assocID];
+         *stop = YES;
+         return;
+       }
     }
-   }];
+  }];
 }
 
 - (void)dockClosestSectionHeader
@@ -608,26 +627,6 @@ static inline void RCTApplyTranformationAccordingLayoutDirection(UIView *view, U
   _scrollView.stickyHeaderIndices = headerIndices;
 }
 
-- (NSDictionary *)anchorMap
-{
-  return _scrollView.anchorMap;
-}
-
-- (void)setAnchorMap:(NSDictionary *)anchorMap
-{
-  _scrollView.anchorMap = anchorMap;
-}
-
-- (NSIndexSet *)anchorIndices
-{
-  return _scrollView.anchorIndices;
-}
-
-- (void)setAnchorIndices:(NSIndexSet *)anchorIndices
-{
-  _scrollView.anchorIndices = anchorIndices;
-}
-
 - (void)setClipsToBounds:(BOOL)clipsToBounds
 {
   super.clipsToBounds = clipsToBounds;
@@ -816,15 +815,41 @@ RCT_SCROLL_EVENT_HANDLER(scrollViewDidZoom, onScroll)
 
     // Calculate changed frames
     NSArray<NSDictionary *> *childFrames = [self calculateChildFramesData];
+    NSArray *visibleIds = [self calculateVisibleViews];
 
     // Dispatch event
-    RCT_SEND_SCROLL_EVENT(onScroll, (@{@"updatedChildFrames": childFrames}));
+    RCT_SEND_SCROLL_EVENT(onScroll, (@{
+      @"updatedChildFrames": childFrames,
+      @"visibleIds": visibleIds
+    }));
 
     // Update dispatch time
     _lastScrollDispatchTime = now;
     _allowNextScrollNoMatterWhat = NO;
   }
   RCT_FORWARD_SCROLL_EVENT(scrollViewDidScroll:scrollView);
+}
+
+- (NSArray *) calculateVisibleViews
+{
+  NSMutableArray *visibleIds = [NSMutableArray new];
+  CGFloat scrollTop = _scrollView.bounds.origin.y + _scrollView.contentInset.top;
+  CGFloat scrollBottom = _scrollView.bounds.origin.y + _scrollView.contentInset.top + _scrollView.bounds.size.height;
+
+  [[_contentView reactSubviews] enumerateObjectsUsingBlock:
+   ^(UIView *anchor, __unused NSUInteger idx, __unused BOOL *stop) {
+     RCTView *reactAnchor = (RCTView *) anchor;
+     if (![anchor isKindOfClass:[RCTView class]] || ![reactAnchor assocID]) {
+       return;
+     }
+     CGFloat height = anchor.bounds.size.height;
+     CGFloat top = anchor.center.y - height * anchor.layer.anchorPoint.y;
+     CGFloat bottom = anchor.center.y + height * anchor.layer.anchorPoint.y;
+     if (bottom >= scrollTop && top <= scrollBottom) {
+       [visibleIds addObject:[reactAnchor assocID]];
+     }
+  }];
+  return visibleIds;
 }
 
 - (NSArray<NSDictionary *> *)calculateChildFramesData

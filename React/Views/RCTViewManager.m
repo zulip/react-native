@@ -117,6 +117,8 @@ RCT_EXPORT_VIEW_PROPERTY(tvParallaxProperties, NSDictionary)
 RCT_EXPORT_VIEW_PROPERTY(accessibilityLabel, NSString)
 RCT_EXPORT_VIEW_PROPERTY(accessibilityTraits, UIAccessibilityTraits)
 RCT_EXPORT_VIEW_PROPERTY(backgroundColor, UIColor)
+RCT_EXPORT_VIEW_PROPERTY(assocID, NSString)
+
 RCT_REMAP_VIEW_PROPERTY(accessible, isAccessibilityElement, BOOL)
 RCT_REMAP_VIEW_PROPERTY(testID, accessibilityIdentifier, NSString)
 RCT_REMAP_VIEW_PROPERTY(backfaceVisibility, layer.doubleSided, css_backface_visibility_t)

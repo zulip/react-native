@@ -244,6 +244,13 @@ const View = React.createClass({
     onMagicTap: PropTypes.func,
 
     /**
+     * Used to locate this view between updates.
+     *
+     * > This disables the 'layout-only view removal' optimization for this view!
+     */
+    assocID: PropTypes.string,
+
+    /**
      * Used to locate this view in end-to-end tests.
      *
      * > This disables the 'layout-only view removal' optimization for this view!

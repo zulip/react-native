@@ -54,6 +54,8 @@
  */
 @property (nonatomic, assign) NSInteger reactZIndex;
 
+@property (nonatomic, assign) NSString *assocID;
+
 /**
  * This is an optimization used to improve performance
  * for large scrolling views with many subviews, such as a

@@ -112,23 +112,12 @@ const ScrollView = React.createClass({
      */
     alwaysBounceVertical: PropTypes.bool,
     /**
-     * An array of child indices determining which children count as
-     * 'anchors' (points of reference that tell the scroll view how to maintain
-     * its positions as items are added or removed).
-     * @platform ios
-     */
-    anchorIndices: PropTypes.arrayOf(PropTypes.number),
-    /**
-     * An map from old anchor indices => new anchor indices. The ScrollView
-     * uses this map to find the current anchor during a state change
-     * (and appropriately change the `contentOffset`)
-     * @platform ios
-     */
-    anchorMap: PropTypes.objectOf(PropTypes.number),
-    /**
-     * When true, the scroll view automatically adjusts the offset of the
-     * scroll view to maintain its position when items are added and deleted
-     * from either end of the scroll view.
+     * When true, the scroll view automatically adjust the offset of the
+     * scroll view to maintain its position when items are changed in the scroll
+     * view.
+     *
+     * For this to work, each view that you want to be used as an anchor
+     * must have a unique 'assocID' prop that persists across updates.
      * @platform ios
      */
     anchorMode: PropTypes.bool,
