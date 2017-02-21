@@ -100,7 +100,6 @@ static NSString *RCTRecursiveAccessibilityLabel(UIView *view)
 }
 
 @synthesize reactZIndex = _reactZIndex;
-@synthesize assocID = _assocID;
 
 - (instancetype)initWithFrame:(CGRect)frame
 {

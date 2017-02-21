@@ -54,7 +54,7 @@
  */
 @property (nonatomic, assign) NSInteger reactZIndex;
 
-@property (nonatomic, assign) NSString *assocID;
+@property (nonatomic, copy) NSString *assocID;
 
 /**
  * This is an optimization used to improve performance
