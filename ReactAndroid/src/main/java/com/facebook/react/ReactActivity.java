@@ -10,13 +10,20 @@ package com.facebook.react;
 import javax.annotation.Nullable;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.view.KeyEvent;
 
 import com.facebook.react.modules.core.DefaultHardwareBackBtnHandler;
 import com.facebook.react.modules.core.PermissionAwareActivity;
 import com.facebook.react.modules.core.PermissionListener;
+import com.facebook.react.modules.network.OkHttpClientProvider;
 
 /**
  * Base Activity for React Native applications.
@@ -46,10 +53,33 @@ public abstract class ReactActivity extends Activity
     return new ReactActivityDelegate(this, getMainComponentName());
   }
 
+  private class EvictIdleConnectionsTask extends AsyncTask {
+    @Override
+    protected Object doInBackground(Object[] objects) {
+      OkHttpClientProvider.getOkHttpClient().connectionPool().evictAll();
+      return null;
+    }
+  }
+
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     mDelegate.onCreate(savedInstanceState);
+    
+    BroadcastReceiver br = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Bundle extras = intent.getExtras();
+            NetworkInfo info = extras.getParcelable("networkInfo");
+            NetworkInfo.State state = info.getState();
+            if (state == NetworkInfo.State.DISCONNECTED) {
+              new EvictIdleConnectionsTask().execute();
+            }
+        }
+    };
+    final IntentFilter intentFilter = new IntentFilter();
+    intentFilter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
+    getApplicationContext().registerReceiver(br, intentFilter);
   }
 
   @Override
