@@ -1,3 +1,19 @@
+# React Native &middot; Zulip version
+
+This is a version of React Native maintained by
+[the Zulip project](https://github.com/zulip/zulip),
+for use in the
+[Zulip mobile app](https://github.com/zulip/zulip-mobile).
+
+For more information about this repo,
+[see our documentation](https://github.com/zulip/zulip-mobile/blob/master/docs/architecture/our-rn.md).
+
+---
+
+### Upstream README follows.
+
+---
+
 # [React Native](https://facebook.github.io/react-native/) &middot;  [![Circle CI Status](https://circleci.com/gh/facebook/react-native.svg?style=shield)](https://circleci.com/gh/facebook/react-native) [![npm version](https://badge.fury.io/js/react-native.svg)](https://badge.fury.io/js/react-native) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md#pull-requests)
 
 Learn once, write anywhere: Build mobile apps with React.
