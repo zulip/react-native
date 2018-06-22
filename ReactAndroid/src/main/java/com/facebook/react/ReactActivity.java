@@ -9,14 +9,18 @@ package com.facebook.react;
 
 import javax.annotation.Nullable;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.support.v4.content.ContextCompat;
 import android.view.KeyEvent;
 
 import com.facebook.react.modules.core.DefaultHardwareBackBtnHandler;
 import com.facebook.react.modules.core.PermissionAwareActivity;
 import com.facebook.react.modules.core.PermissionListener;
+import com.facebook.react.modules.network.OkHttpClientProvider;
 
 /**
  * Base Activity for React Native applications.
@@ -50,6 +54,10 @@ public abstract class ReactActivity extends Activity
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     mDelegate.onCreate(savedInstanceState);
+    if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_NETWORK_STATE)
+        == PackageManager.PERMISSION_GRANTED) {
+      OkHttpClientProvider.addNetworkListenerToEvictIdleConnectionsOnNetworkChange(getApplicationContext());
+    }
   }
 
   @Override
