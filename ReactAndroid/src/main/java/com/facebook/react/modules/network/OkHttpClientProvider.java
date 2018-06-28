@@ -85,6 +85,7 @@ public class OkHttpClientProvider {
         final Thread thread = new Thread() {
           public void run() {
               for (OkHttpClient client: sClients) {
+                client.dispatcher().cancelAll();
                 client.connectionPool().evictAll();
               }
               result.finish();
