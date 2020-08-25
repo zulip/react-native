@@ -17,7 +17,6 @@ jest.requireActual('../Libraries/polyfills/error-guard');
 
 global.__DEV__ = true;
 
-global.Promise = jest.requireActual('promise');
 global.regeneratorRuntime = jest.requireActual('regenerator-runtime/runtime');
 
 global.requestAnimationFrame = function(callback) {
