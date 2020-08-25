@@ -44,7 +44,9 @@ buck-out
 .gradle
 local.properties
 *.iml
-/android/
+# Not ignoring /android/ allows our fork to be a working dependency
+# (https://github.com/facebook/react-native/wiki/Building-from-source#publishing-to-a-git-fork-dependency)
+# /android/
 
 # Node
 node_modules
